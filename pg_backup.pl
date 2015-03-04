@@ -169,10 +169,10 @@ ${bold}-h, --help$norm
 ${bold}-l, --list_only$norm
     List databases that would be backed up.
     
-${bold}-t, --threads ${under}THREADS$norm
+${bold}-t, --threads$norm ${under}THREADS$norm
     Number of threads to use by pigz.  Default 1.
     
-${bold}-v, --vacuum
+${bold}-v, --vacuum$norm
     Run vacuum analyze on database before backup.  
     
 ${bold}-w, --weekly$norm
