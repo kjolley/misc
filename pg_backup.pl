@@ -92,7 +92,7 @@ foreach my $database (@$list) {
 	$status .= "; dumped (${dump_time}s)";
 	print "$status; moving\r";
 	$start = time;
-	eval( system("mv '$tmp_dir/$database.gz' '$dest_dir'") );
+	eval { system("mv '$tmp_dir/$database.gz' '$dest_dir'") };
 	exit if $? >>= 8;
 	$stop = time;
 	my $move_time = $stop - $start;
