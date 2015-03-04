@@ -37,15 +37,14 @@ my %opts;
 GetOptions(
 	'd|databases=s' => \$opts{'d'},
 	'e|exclude=s'   => \$opts{'e'},
-	'l|list_only'   => \$opts{'l'},
 	'h|help'        => \$opts{'h'},
+	'l|list_only'   => \$opts{'l'},
 	't|threads=i'   => \$opts{'t'},
 	'v|vacuum'      => \$opts{'v'},
 	'w|weekly'      => \$opts{'w'}
 ) or die("Error in command line arguments\n");
 my $EXIT = 0;
 local @SIG{qw (INT TERM HUP)} = ( sub { $EXIT = 1 } ) x 3;    #Terminate on kill signal.
-
 if ( $opts{'h'} ) {
 	show_help();
 	exit;
@@ -164,11 +163,11 @@ ${bold}-e, --exclude$norm ${under}DATABASES$norm
     Comma-separated list of databases to exclude from backup.  This is ignored
     if databases are explicitly listed using the --databases argument.
     
-${bold}-l, --list_only$norm
-    List databases that would be backed up.
-    
 ${bold}-h, --help$norm
     This help page.
+    
+${bold}-l, --list_only$norm
+    List databases that would be backed up.
     
 ${bold}-t, --threads ${under}THREADS$norm
     Number of threads to use by pigz.  Default 1.
