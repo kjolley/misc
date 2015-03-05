@@ -39,12 +39,14 @@ GetOptions(
 	'e|exclude=s'   => \$opts{'e'},
 	'h|help'        => \$opts{'h'},
 	'l|list_only'   => \$opts{'l'},
+	's|status=i'    => \$opts{'s'},
 	't|threads=i'   => \$opts{'t'},
 	'v|vacuum'      => \$opts{'v'},
 	'w|weekly'      => \$opts{'w'}
 ) or die("Error in command line arguments\n");
 my $EXIT = 0;
 local @SIG{qw (INT TERM HUP)} = ( sub { $EXIT = 1 } ) x 3;    #Terminate on kill signal.
+
 if ( $opts{'h'} ) {
 	show_help();
 	exit;
@@ -64,22 +66,23 @@ if ( !-d $dest_dir ) {
 	exit if $? >>= 8;
 }
 my $path = BINARIES;
+$opts{'s'} //= 1;
 foreach my $database (@$list) {
 	last if $EXIT;
 	my $status = "$database: ";
-	print "$status\r";
+	print "$status\r" if $opts{'s'} == 2;
 	if ( $opts{'v'} ) {
 		$status .= "vacuuming";
-		print "$status\r";
+		print "$status\r" if $opts{'s'} == 2;
 		my $start = time;
 		eval { system( "$path/vacuumdb", '-z', -U => USER, $database ) };
 		exit if $? >>= 8;
 		my $stop        = time;
 		my $vacuum_time = $stop - $start;
 		$status = "$database: vacuumed (${vacuum_time}s)";
-		print "$status\r";
+		print "$status\r" if $opts{'s'} == 2;
 	}
-	print "$status; dumping\r";
+	print "$status; dumping\r" if $opts{'s'} == 2;
 	my $start   = time;
 	my $user    = USER;
 	my $tmp_dir = TMP_DIR;
@@ -89,14 +92,14 @@ foreach my $database (@$list) {
 	my $stop      = time;
 	my $dump_time = $stop - $start;
 	$status .= "; dumped (${dump_time}s)";
-	print "$status; moving\r";
+	print "$status; moving\r" if $opts{'s'} == 2;
 	$start = time;
 	eval { system("mv '$tmp_dir/$database.gz' '$dest_dir'") };
 	exit if $? >>= 8;
 	$stop = time;
 	my $move_time = $stop - $start;
 	$status .= "; moved (${move_time}s)";
-	say "$status";
+	say "$status" if $opts{'s'};
 }
 
 sub get_database_list {
@@ -168,6 +171,13 @@ ${bold}-h, --help$norm
     
 ${bold}-l, --list_only$norm
     List databases that would be backed up.
+    
+${bold}-s, --status$norm ${under}LEVEL$norm
+    Set the chattiness of the output.
+    0: Only errors shown.
+    1: One line per database (default: best option for running under CRON).
+    2: Update status line at every stage (best for running directly from
+       command prompt).
     
 ${bold}-t, --threads$norm ${under}THREADS$norm
     Number of threads to use by pigz.  Default 1.
