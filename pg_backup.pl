@@ -51,60 +51,65 @@ if ( $opts{'h'} ) {
 	show_help();
 	exit;
 }
-config_check();
-my $list = get_database_list();
-if ( $opts{'l'} ) {
-	local $" = "\n";
-	say "@$list";
-	exit;
-}
-my $day      = get_day();
-my $dest_dir = BACKUP_DIR;
-$dest_dir .= "/$day" if $opts{'w'};
-if ( !-d $dest_dir ) {
-	eval { system( 'mkdir', '-p', $dest_dir ) };
-	exit if $? >>= 8;
-}
-my $path = BINARIES;
-$opts{'s'} //= 1;
-foreach my $database (@$list) {
-	last if $EXIT;
-	my $status = "$database: ";
-	print "$status\r" if $opts{'s'} == 2;
-	if ( $opts{'v'} ) {
-		$status .= "vacuuming";
-		print "$status\r" if $opts{'s'} == 2;
-		my $start = time;
-		eval { system( "$path/vacuumdb", '-z', -U => USER, $database ) };
-		exit if $? >>= 8;
-		my $stop        = time;
-		my $vacuum_time = $stop - $start;
-		$status = "$database: vacuumed (${vacuum_time}s)";
-		print "$status\r" if $opts{'s'} == 2;
+main();
+exit;
+
+sub main {
+	config_check();
+	my $list = get_database_list();
+	if ( $opts{'l'} ) {
+		local $" = "\n";
+		say "@$list";
+		exit;
 	}
-	print "$status; dumping\r" if $opts{'s'} == 2;
-	my $start   = time;
-	my $user    = USER;
-	my $tmp_dir = TMP_DIR;
-	$opts{'t'} //= 1;
-	eval { system("$path/pg_dump -U $user $database | $path/pigz -p $opts{'t'} -c > '$tmp_dir/$database.gz'") };
-	exit if $? >>= 8;
-	my $stop      = time;
-	my $dump_time = $stop - $start;
-	$status .= "; dumped (${dump_time}s)";
-	print "$status; moving\r" if $opts{'s'} == 2;
-	$start = time;
-	eval { system("mv '$tmp_dir/$database.gz' '$dest_dir'") };
-	exit if $? >>= 8;
-	$stop = time;
-	my $move_time = $stop - $start;
-	$status .= "; moved (${move_time}s)";
-	say "$status" if $opts{'s'};
+	my $day      = get_day();
+	my $dest_dir = BACKUP_DIR;
+	$dest_dir .= "/$day" if $opts{'w'};
+	if ( !-d $dest_dir ) {
+		eval { system( 'mkdir', '-p', $dest_dir ) };
+		exit if $? >>= 8;
+	}
+	my $path = BINARIES;
+	$opts{'s'} //= 1;
+	foreach my $database (@$list) {
+		last if $EXIT;
+		my $status = "$database: ";
+		print "$status\r" if $opts{'s'} == 2;
+		if ( $opts{'v'} ) {
+			$status .= "vacuuming";
+			print "$status\r" if $opts{'s'} == 2;
+			my $start = time;
+			eval { system( "$path/vacuumdb", '-z', -U => USER, $database ) };
+			exit if $? >>= 8;
+			my $stop        = time;
+			my $vacuum_time = $stop - $start;
+			$status = "$database: vacuumed (${vacuum_time}s)";
+			print "$status\r" if $opts{'s'} == 2;
+		}
+		print "$status; dumping\r" if $opts{'s'} == 2;
+		my $start   = time;
+		my $user    = USER;
+		my $tmp_dir = TMP_DIR;
+		$opts{'t'} //= 1;
+		eval { system("$path/pg_dump -U $user $database | $path/pigz -p $opts{'t'} -c > '$tmp_dir/$database.gz'") };
+		exit if $? >>= 8;
+		my $stop      = time;
+		my $dump_time = $stop - $start;
+		$status .= "; dumped (${dump_time}s)";
+		print "$status; moving\r" if $opts{'s'} == 2;
+		$start = time;
+		eval { system("mv '$tmp_dir/$database.gz' '$dest_dir'") };
+		exit if $? >>= 8;
+		$stop = time;
+		my $move_time = $stop - $start;
+		$status .= "; moved (${move_time}s)";
+		say "$status" if $opts{'s'};
+	}
 }
 
 sub get_database_list {
 	my $db = DBI->connect( 'DBI:Pg:dbname=template1', USER, PASSWORD );
-	$list = $db->selectcol_arrayref("SELECT datname FROM pg_database ORDER BY datname");
+	my $list = $db->selectcol_arrayref("SELECT datname FROM pg_database ORDER BY datname");
 	$db->disconnect;
 	my %hash_list = map { $_ => 1 } @$list;
 	if ( $opts{'d'} ) {
