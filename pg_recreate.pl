@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #Drop/recreate PostgreSQL databases from backup using pigz (parallel gzip)
 #Written by Keith Jolley
-#Copyright (c) 2015, University of Oxford
+#Copyright (c) 2015-2016, University of Oxford
 #E-mail: keith.jolley@zoo.ox.ac.uk
 #
 #This program is free software: you can redistribute it and/or modify
@@ -39,6 +39,7 @@ GetOptions(
 	'l|list_only'   => \$opts{'l'},
 	't|threads=i'   => \$opts{'t'},
 	'v|vacuum'      => \$opts{'v'},
+	'x|exclude=s'   => \$opts{'x'}
 ) or die("Error in command line arguments\n");
 $opts{'d'} //= 'latest';
 if ( $opts{'h'} ) {
@@ -85,11 +86,18 @@ sub get_backup_dir {
 sub get_backup_list {
 	my $dir = get_backup_dir();
 	die "Directory $dir does not exist.\n" if !-e $dir;
+	my @exclude = split /,/x, $opts{'x'};
+	my %exclude;
+	foreach my $db (@exclude) {
+		$db =~ s/\s//gx;
+		$exclude{$db} = 1;
+	}
 	opendir( DIR, $dir ) or die $!;
 	my @dbases;
 	while ( my $file = readdir(DIR) ) {
 		next if $file =~ /^\./;
 		if ( $file =~ /([A-z0-9_\-]+)\.gz$/ ) {
+			next if $exclude{$1};
 			push @dbases, $1;
 		}
 	}
@@ -152,7 +160,10 @@ ${bold}-t, --threads$norm ${under}THREADS$norm
     Number of threads to use by pigz.  Default 1.
     
 ${bold}-v, --vacuum$norm
-    Run vacuum analyze on database after recover.  
+    Run vacuum analyze on database after recover.
+    
+${bold}-x, --exclude$norm ${under}DATABSES$norm
+    Comma-separated list of databases to exclude.
     
 HELP
 	return;
