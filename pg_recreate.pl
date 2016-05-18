@@ -162,7 +162,7 @@ ${bold}-t, --threads$norm ${under}THREADS$norm
 ${bold}-v, --vacuum$norm
     Run vacuum analyze on database after recover.
     
-${bold}-x, --exclude$norm ${under}DATABSES$norm
+${bold}-x, --exclude$norm ${under}DATABASES$norm
     Comma-separated list of databases to exclude.
     
 HELP
