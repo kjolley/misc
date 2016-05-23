@@ -86,6 +86,7 @@ sub get_backup_dir {
 sub get_backup_list {
 	my $dir = get_backup_dir();
 	die "Directory $dir does not exist.\n" if !-e $dir;
+	$opts{'x'} //= q();
 	my @exclude = split /,/x, $opts{'x'};
 	my %exclude;
 	foreach my $db (@exclude) {
