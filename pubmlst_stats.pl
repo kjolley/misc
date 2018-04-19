@@ -72,13 +72,15 @@ sub output_counts {
 	my $text_out = "$opts{'dir'}/stats.txt";
 	open( my $fh, '>:encoding(utf8)', $text_out ) || die "Cannot open $text_out for writing.\n";
 	my @taxa = keys %$counts;
-	say $fh qq(taxon\tisolates\tgenomes\tloci\talleles);
+	say $fh qq(taxon\tisolates\tgenomes\tloci\talleles\tsenders\tcurators);
 	foreach my $taxon ( sort @taxa ) {
 		print $fh $taxon;
-		print $fh qq(\t) . ( $counts->{$taxon}->{'isolates'} // q() );
-		print $fh qq(\t) . ( $counts->{$taxon}->{'genomes'}  // q() );
-		print $fh qq(\t) . ( $counts->{$taxon}->{'loci'}     // q() );
-		say $fh qq(\t) . ( $counts->{$taxon}->{'sequences'} // q() );
+		print $fh qq(\t) . ( $counts->{$taxon}->{'isolates'}  // q() );
+		print $fh qq(\t) . ( $counts->{$taxon}->{'genomes'}   // q() );
+		print $fh qq(\t) . ( $counts->{$taxon}->{'loci'}      // q() );
+		print $fh qq(\t) . ( $counts->{$taxon}->{'sequences'} // q() );
+		print $fh qq(\t) . ( $counts->{$taxon}->{'senders'}   // q() );
+		say $fh qq(\t) . ( $counts->{$taxon}->{'curators'} // q() );
 	}
 	close $fh;
 	if ( $opts{'format'} eq 'Excel' ) {
@@ -249,6 +251,19 @@ sub get_counts {
 			if ( $isolate_db->{'genomes'} ) {
 				my $isolates = get_route( $isolate_db->{'genomes'} );
 				$taxon_data->{'genomes'} = $isolates->{'records'};
+			}
+			if ( $isolate_db->{'fields'} ) {
+				my $fields = get_route( $isolate_db->{'fields'} );
+				foreach my $field (@$fields) {
+					if ( $field->{'name'} eq 'sender' ) {
+						my $senders = get_route( $field->{'values'} );
+						$taxon_data->{'senders'} = $senders->{'records'};
+					}
+					if ( $field->{'name'} eq 'curator' ) {
+						my $senders = get_route( $field->{'values'} );
+						$taxon_data->{'curators'} = $senders->{'records'};
+					}
+				}
 			}
 		}
 		if ( $taxa->{$taxon}->{'seqdef'} ) {
