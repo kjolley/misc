@@ -53,14 +53,16 @@ main();
 exit;
 
 sub main {
-	my $taxa      = get_taxa_list();
-	my $counts    = get_counts($taxa);
-	my $countries = get_country_isolates($taxa);
-	my $dates     = get_isolate_dates($taxa);
-	my $excel     = initiate_excel();
+	my $taxa          = get_taxa_list();
+	my $counts        = get_counts($taxa);
+	my $countries     = get_country_isolates($taxa);
+	my $isolate_dates = get_isolate_dates($taxa);
+	my $genome_dates  = get_isolate_dates( $taxa, { genomes => 1 } );
+	my $excel         = initiate_excel();
 	output_counts( $counts, $excel );
 	output_countries( $countries, $excel );
-	output_dates( $dates, $excel );
+	output_dates( $isolate_dates, $excel, 'isolates_added' );
+	output_dates( $genome_dates,  $excel, 'genomes_added' );
 
 	#		use Data::Dumper;
 	#		say Dumper $dates;
@@ -91,7 +93,7 @@ sub output_counts {
 }
 
 sub output_dates {
-	my ( $dates, $excel ) = @_;
+	my ( $dates, $excel, $tab ) = @_;
 	my $text_out = "$opts{'dir'}/dates.txt";
 	my @taxa     = sort keys %$dates;
 	my ( $end_year, $end_month ) = get_end_dates();
@@ -114,7 +116,7 @@ sub output_dates {
 	}
 	close $fh;
 	if ( $opts{'format'} eq 'Excel' ) {
-		write_excel_tab( $excel, 'isolates_added', $text_out );
+		write_excel_tab( $excel, $tab, $text_out );
 		unlink $text_out;
 	}
 }
@@ -331,9 +333,9 @@ sub get_country_isolates {
 }
 
 sub get_isolate_dates {
-	my ($taxa) = @_;
-	my $dates  = {};
-	my $pm     = Parallel::ForkManager->new( $opts{'threads'} );
+	my ( $taxa, $options ) = @_;
+	my $dates = {};
+	my $pm    = Parallel::ForkManager->new( $opts{'threads'} );
 	$pm->run_on_finish(
 		sub {
 			my ( $pid, $exit_code, $ident, $exit_signal, $core_dump, $taxon_data ) = @_;
@@ -351,7 +353,9 @@ sub get_isolate_dates {
 				my $fields = get_route( $isolate_db->{'fields'} );
 				foreach my $field (@$fields) {
 					if ( $field->{'name'} eq 'date_entered' && $field->{'breakdown'} ) {
-						my $taxon_dates = get_route( $field->{'breakdown'} );
+						my $route = $field->{'breakdown'};
+						$route .= '?genomes=1' if $options->{'genomes'};
+						my $taxon_dates = get_route($route);
 						$taxon_data->{'dates'} = extract_date_series($taxon_dates);
 					}
 				}
