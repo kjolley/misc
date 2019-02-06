@@ -1,7 +1,7 @@
 #!/usr/bin/perl
 #Backup PostgreSQL databases using pigz (parallel gzip)
 #Written by Keith Jolley
-#Copyright (c) 2015, University of Oxford
+#Copyright (c) 2015-2019, University of Oxford
 #E-mail: keith.jolley@zoo.ox.ac.uk
 #
 #This program is free software: you can redistribute it and/or modify
@@ -23,7 +23,7 @@ use 5.010;
 use constant {
 	USER           => 'postgres',
 	PASSWORD       => undef,                                     #Better to set password in .pgpass file
-	BACKUP_DIR     => '/mnt/nfs/filestore2/backups/databases',
+	BACKUP_DIR     => '/mnt/nfs/filestore4/backups/databases',
 	TMP_DIR        => '/var/tmp',
 	BINARIES       => '/usr/bin',
 	ALWAYS_EXCLUDE => 'template0,template1'
@@ -36,9 +36,11 @@ use POSIX;
 my %opts;
 GetOptions(
 	'd|databases=s' => \$opts{'d'},
+	'dir=s'         => \$opts{'dir'},
 	'e|exclude=s'   => \$opts{'e'},
 	'h|help'        => \$opts{'h'},
 	'l|list_only'   => \$opts{'l'},
+	'm|check_mounted=s' => \$opts{'check_mounted'},
 	's|status=i'    => \$opts{'s'},
 	't|threads=i'   => \$opts{'t'},
 	'v|vacuum'      => \$opts{'v'},
@@ -51,6 +53,13 @@ if ( $opts{'h'} ) {
 	show_help();
 	exit;
 }
+if ($opts{'check_mounted'}){
+	my $cmd = qq(if grep -qs '$opts{'check_mounted'} ' /proc/mounts;then echo 1;fi);
+	my $mounted = `$cmd`;
+	if (!$mounted){
+		die "Filesystem $opts{'check_mounted'} is not mounted.\n";
+	}
+}
 main();
 exit;
 
@@ -62,8 +71,8 @@ sub main {
 		say "@$list";
 		exit;
 	}
-	my $day      = get_day();
-	my $dest_dir = BACKUP_DIR;
+	my $day = get_day();
+	my $dest_dir = $opts{'dir'} // BACKUP_DIR;
 	$dest_dir .= "/$day" if $opts{'w'};
 	if ( !-d $dest_dir ) {
 		eval { system( 'mkdir', '-p', $dest_dir ) };
@@ -167,6 +176,9 @@ ${bold}-d, --databases$norm ${under}DATABASES$norm
     Comma-separated list of databases to backup.  Select all databases if
     unspecified.
     
+${bold}--dir$norm ${under}DIR$norm
+    Full path to backup directory
+
 ${bold}-e, --exclude$norm ${under}DATABASES$norm
     Comma-separated list of databases to exclude from backup.  This is ignored
     if databases are explicitly listed using the --databases argument.
@@ -176,6 +188,9 @@ ${bold}-h, --help$norm
     
 ${bold}-l, --list_only$norm
     List databases that would be backed up.
+    
+${bold}-m, --check_mounted$norm ${under}MOUNT POINT$norm
+    Check that specified directory is mounted. Stop if not.
     
 ${bold}-s, --status$norm ${under}LEVEL$norm
     Set the chattiness of the output.
