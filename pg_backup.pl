@@ -35,16 +35,17 @@ use Term::Cap;
 use POSIX;
 my %opts;
 GetOptions(
-	'd|databases=s' => \$opts{'d'},
-	'dir=s'         => \$opts{'dir'},
-	'e|exclude=s'   => \$opts{'e'},
-	'h|help'        => \$opts{'h'},
-	'l|list_only'   => \$opts{'l'},
+	'd|databases=s'     => \$opts{'d'},
+	'dir=s'             => \$opts{'dir'},
+	'e|exclude=s'       => \$opts{'e'},
+	'h|help'            => \$opts{'h'},
+	'l|list_only'       => \$opts{'l'},
 	'm|check_mounted=s' => \$opts{'check_mounted'},
-	's|status=i'    => \$opts{'s'},
-	't|threads=i'   => \$opts{'t'},
-	'v|vacuum'      => \$opts{'v'},
-	'w|weekly'      => \$opts{'w'}
+	'no_intermediate'   => \$opts{'no_intermediate'},
+	's|status=i'        => \$opts{'s'},
+	't|threads=i'       => \$opts{'t'},
+	'v|vacuum'          => \$opts{'v'},
+	'w|weekly'          => \$opts{'w'}
 ) or die("Error in command line arguments\n");
 my $EXIT = 0;
 local @SIG{qw (INT TERM HUP)} = ( sub { $EXIT = 1 } ) x 3;    #Terminate on kill signal.
@@ -53,10 +54,10 @@ if ( $opts{'h'} ) {
 	show_help();
 	exit;
 }
-if ($opts{'check_mounted'}){
-	my $cmd = qq(if grep -qs '$opts{'check_mounted'} ' /proc/mounts;then echo 1;fi);
+if ( $opts{'check_mounted'} ) {
+	my $cmd     = qq(if grep -qs '$opts{'check_mounted'} ' /proc/mounts;then echo 1;fi);
 	my $mounted = `$cmd`;
-	if (!$mounted){
+	if ( !$mounted ) {
 		die "Filesystem $opts{'check_mounted'} is not mounted.\n";
 	}
 }
@@ -100,18 +101,24 @@ sub main {
 		my $user    = USER;
 		my $tmp_dir = TMP_DIR;
 		$opts{'t'} //= 1;
-		eval { system("$path/pg_dump -U $user $database | $path/pigz -p $opts{'t'} -c > '$tmp_dir/$database.gz'") };
+		if ( $opts{'no_intermediate'} ) {
+			eval { system("$path/pg_dump -U $user $database | $path/pigz -p $opts{'t'} -c > '$dest_dir/$database.gz'") };
+		} else {
+			eval { system("$path/pg_dump -U $user $database | $path/pigz -p $opts{'t'} -c > '$tmp_dir/$database.gz'") };
+		}
 		exit if $? >>= 8;
 		my $stop      = time;
 		my $dump_time = $stop - $start;
 		$status .= "; dumped (${dump_time}s)";
-		print "$status; moving\r" if $opts{'s'} == 2;
-		$start = time;
-		eval { system("mv '$tmp_dir/$database.gz' '$dest_dir'") };
-		exit if $? >>= 8;
-		$stop = time;
-		my $move_time = $stop - $start;
-		$status .= "; moved (${move_time}s)";
+		if ( !$opts{'no_intermediate'} ) {
+			print "$status; moving\r" if $opts{'s'} == 2;
+			$start = time;
+			eval { system("mv '$tmp_dir/$database.gz' '$dest_dir'") };
+			exit if $? >>= 8;
+			$stop = time;
+			my $move_time = $stop - $start;
+			$status .= "; moved (${move_time}s)";
+		}
 		say "$status" if $opts{'s'};
 	}
 }
@@ -191,6 +198,11 @@ ${bold}-l, --list_only$norm
     
 ${bold}-m, --check_mounted$norm ${under}MOUNT POINT$norm
     Check that specified directory is mounted. Stop if not.
+    
+${bold}--no_intermediate$norm
+    Save directly to target directory, rather than saving to a temp directory
+    first and then moving. This may be slower, but can be preferable if you're
+    using SSDs and wish to minimize the amount of data written.
     
 ${bold}-s, --status$norm ${under}LEVEL$norm
     Set the chattiness of the output.
