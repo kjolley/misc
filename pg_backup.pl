@@ -1,7 +1,7 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #Backup PostgreSQL databases using pigz (parallel gzip)
 #Written by Keith Jolley
-#Copyright (c) 2015-2019, University of Oxford
+#Copyright (c) 2015-2023, University of Oxford
 #E-mail: keith.jolley@zoo.ox.ac.uk
 #
 #This program is free software: you can redistribute it and/or modify
@@ -16,6 +16,7 @@
 #
 #You should have received a copy of the GNU General Public License
 #along with BIGSdb.  If not, see <http://www.gnu.org/licenses/>.
+#Version 20231018
 use strict;
 use warnings;
 use 5.010;
@@ -43,6 +44,7 @@ GetOptions(
 	'm|check_mounted=s' => \$opts{'check_mounted'},
 	'no_intermediate'   => \$opts{'no_intermediate'},
 	's|status=i'        => \$opts{'s'},
+	'split=i'           => \$opts{'split'},
 	't|threads=i'       => \$opts{'t'},
 	'v|vacuum'          => \$opts{'v'},
 	'w|weekly'          => \$opts{'w'}
@@ -72,7 +74,7 @@ sub main {
 		say "@$list";
 		exit;
 	}
-	my $day = get_day();
+	my $day      = get_day();
 	my $dest_dir = $opts{'dir'} // BACKUP_DIR;
 	$dest_dir .= "/$day" if $opts{'w'};
 	if ( !-d $dest_dir ) {
@@ -101,20 +103,42 @@ sub main {
 		my $user    = USER;
 		my $tmp_dir = TMP_DIR;
 		$opts{'t'} //= 1;
-		if ( $opts{'no_intermediate'} ) {
-			eval { system("$path/pg_dump -U $user $database | $path/pigz -p $opts{'t'} -c > '$dest_dir/$database.gz'") };
+		if ( $opts{'split'} ) {
+			my $dir = $opts{'no_intermediate'} ? "$dest_dir/$database" : "$tmp_dir/$database";
+			if ( !-d $dir ) {
+				eval { system( 'mkdir', '-p', $dir ) };
+				exit if $? >>= 8;
+			}
+			eval {
+				system( "rm -fr $dir/*;$path/pg_dump -U $user $database | split -b $opts{'split'}G -d "
+					  . "--filter='$path/pigz -p $opts{'t'} -c > $dir/${database}_\$FILE.gz'" );
+			};
+			exit if $? >>= 8;
 		} else {
-			eval { system("$path/pg_dump -U $user $database | $path/pigz -p $opts{'t'} -c > '$tmp_dir/$database.gz'") };
+			if ( $opts{'no_intermediate'} ) {
+				eval {
+					system("$path/pg_dump -U $user $database | $path/pigz -p $opts{'t'} -c > '$dest_dir/$database.gz'");
+				};
+			} else {
+				eval {
+					system("$path/pg_dump -U $user $database | $path/pigz -p $opts{'t'} -c > '$tmp_dir/$database.gz'");
+				};
+			}
+			exit if $? >>= 8;
 		}
-		exit if $? >>= 8;
 		my $stop      = time;
 		my $dump_time = $stop - $start;
 		$status .= "; dumped (${dump_time}s)";
 		if ( !$opts{'no_intermediate'} ) {
 			print "$status; moving\r" if $opts{'s'} == 2;
 			$start = time;
-			eval { system("mv '$tmp_dir/$database.gz' '$dest_dir'") };
-			exit if $? >>= 8;
+			if ( $opts{'split'} ) {		
+				eval { system("rm -fr '$dest_dir/${database}';mv '$tmp_dir/${database}' '$dest_dir'") };
+				exit if $? >>= 8;
+			} else {
+				eval { system("mv '$tmp_dir/$database.gz' '$dest_dir'") };
+				exit if $? >>= 8;
+			}
 			$stop = time;
 			my $move_time = $stop - $start;
 			$status .= "; moved (${move_time}s)";
@@ -124,7 +148,7 @@ sub main {
 }
 
 sub get_database_list {
-	my $db = DBI->connect( 'DBI:Pg:dbname=template1', USER, PASSWORD );
+	my $db   = DBI->connect( 'DBI:Pg:dbname=template1', USER, PASSWORD );
 	my $list = $db->selectcol_arrayref("SELECT datname FROM pg_database ORDER BY datname");
 	$db->disconnect;
 	my %hash_list = map { $_ => 1 } @$list;
@@ -137,7 +161,7 @@ sub get_database_list {
 		return \@filtered_list;
 	}
 	my @always_exclude = split /,/, ALWAYS_EXCLUDE;
-	my @opt_exclude = $opts{'e'} ? split /,/, $opts{'e'} : ();
+	my @opt_exclude    = $opts{'e'} ? split /,/, $opts{'e'} : ();
 	delete $hash_list{$_} foreach ( @always_exclude, @opt_exclude );
 	my @filtered_list = sort keys %hash_list;
 	return \@filtered_list;
@@ -145,7 +169,7 @@ sub get_database_list {
 
 sub get_day {
 	my %days = map { substr( $_, 0, 3 ) => $_ } qw/Monday Tuesday Wednesday Thursday Friday Saturday Sunday/;
-	my $day = $days{ substr( localtime, 0, 3 ) };
+	my $day  = $days{ substr( localtime, 0, 3 ) };
 	return $day;
 }
 
@@ -169,7 +193,7 @@ sub show_help {
 	my $termios = POSIX::Termios->new;
 	$termios->getattr;
 	my $ospeed = $termios->getospeed;
-	my $t = Tgetent Term::Cap { TERM => undef, OSPEED => $ospeed };
+	my $t      = Tgetent Term::Cap { TERM => undef, OSPEED => $ospeed };
 	my ( $norm, $bold, $under ) = map { $t->Tputs( $_, 1 ) } qw/me md us/;
 	say << "HELP";
 ${bold}NAME$norm
@@ -203,6 +227,10 @@ ${bold}--no_intermediate$norm
     Save directly to target directory, rather than saving to a temp directory
     first and then moving. This may be slower, but can be preferable if you're
     using SSDs and wish to minimize the amount of data written.
+    
+${bold}--split$norm ${under}SIZE_IN_GB$norm
+    Split the dump file into different files. The size specified is the pre-
+    compressed file size.
     
 ${bold}-s, --status$norm ${under}LEVEL$norm
     Set the chattiness of the output.

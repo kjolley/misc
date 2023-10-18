@@ -1,7 +1,7 @@
-#!/usr/bin/perl
-#Drop/recreate PostgreSQL databases from backup using pigz (parallel gzip)
+#!/usr/bin/env perl
+#Drop/recreate PostgreSQL databases from backup
 #Written by Keith Jolley
-#Copyright (c) 2015-2016, University of Oxford
+#Copyright (c) 2015-2023, University of Oxford
 #E-mail: keith.jolley@zoo.ox.ac.uk
 #
 #This program is free software: you can redistribute it and/or modify
@@ -16,6 +16,7 @@
 #
 #You should have received a copy of the GNU General Public License
 #along with BIGSdb.  If not, see <http://www.gnu.org/licenses/>.
+#Version 20231018
 use strict;
 use warnings;
 use 5.010;
@@ -37,7 +38,6 @@ GetOptions(
 	'd|directory=s' => \$opts{'d'},
 	'h|help'        => \$opts{'h'},
 	'l|list_only'   => \$opts{'l'},
-	't|threads=i'   => \$opts{'t'},
 	'v|vacuum'      => \$opts{'v'},
 	'x|exclude=s'   => \$opts{'x'}
 ) or die("Error in command line arguments\n");
@@ -67,7 +67,11 @@ sub main {
 		system "$bin/createdb -U postgres $dbase";
 		my $threads = $opts{'t'} // 1;
 		my $dir = get_backup_dir();
-		system "$bin/pigz -d -c -p $threads $dir/$dbase.gz | psql $dbase > /dev/null";
+		if (-e "$dir/$dbase.gz"){
+			system "$bin/gunzip -c $dir/$dbase.gz | psql $dbase > /dev/null";
+		} elsif (-d "$dir/$dbase" && glob("$dir/$dbase/*.gz")){
+			system "$bin/zcat $dir/$dbase/*.gz | psql $dbase > /dev/null"
+		}
 		if ( $opts{'v'} ) {
 			say "Vacuum analyzing database $dbase...";
 			system "$bin/psql -c 'VACUUM ANALYZE' $dbase > /dev/null";
@@ -100,6 +104,11 @@ sub get_backup_list {
 		if ( $file =~ /([A-z0-9_\-]+)\.gz$/ ) {
 			next if $exclude{$1};
 			push @dbases, $1;
+		}
+		
+		if (-d "$dir/$file" && glob("$dir/$file/*.gz")){
+			next if $exclude{$file};
+			push @dbases,$file;
 		}
 	}
 	@dbases = sort @dbases;
@@ -156,10 +165,7 @@ ${bold}-h, --help$norm
     
 ${bold}-l, --list_only$norm
     List databases that would be recreated.
-    
-${bold}-t, --threads$norm ${under}THREADS$norm
-    Number of threads to use by pigz.  Default 1.
-    
+          
 ${bold}-v, --vacuum$norm
     Run vacuum analyze on database after recover.
     
