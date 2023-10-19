@@ -16,7 +16,7 @@
 #
 #You should have received a copy of the GNU General Public License
 #along with BIGSdb.  If not, see <http://www.gnu.org/licenses/>.
-#Version 20231018
+#Version 20231019
 use strict;
 use warnings;
 use 5.010;
@@ -68,13 +68,13 @@ sub main {
 		my $threads = $opts{'t'} // 1;
 		my $dir = get_backup_dir();
 		if (-e "$dir/$dbase.gz"){
-			system "$bin/gunzip -c $dir/$dbase.gz | psql $dbase > /dev/null";
+			system "$bin/gunzip -c $dir/$dbase.gz | psql -U postgres $dbase > /dev/null";
 		} elsif (-d "$dir/$dbase" && glob("$dir/$dbase/*.gz")){
-			system "$bin/zcat $dir/$dbase/*.gz | psql $dbase > /dev/null"
+			system "$bin/zcat $dir/$dbase/*.gz | psql -U postgres $dbase > /dev/null"
 		}
 		if ( $opts{'v'} ) {
 			say "Vacuum analyzing database $dbase...";
-			system "$bin/psql -c 'VACUUM ANALYZE' $dbase > /dev/null";
+			system "$bin/psql -U postgres -c 'VACUUM ANALYZE' $dbase > /dev/null";
 		}
 	}
 }
